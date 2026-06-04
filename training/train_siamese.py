@@ -15,7 +15,7 @@ CONFIG = {
     'batch_size':    16,
     'learning_rate': 3e-4,
     'patience':      10,
-    'margin':        1.0,
+    'margin':        0.5,
     'save_path':     os.path.abspath(
                          os.path.join(os.path.dirname(__file__),
                                       '..', 'saved_models', 'siamese.pth')

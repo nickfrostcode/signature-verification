@@ -12,17 +12,17 @@ import torch.nn.functional as F
 
 class SiameseEncoder(nn.Module):
     """
-    Lightweight shared CNN encoder.
+    Medium-sized shared CNN encoder.
+    Balanced between capacity and generalization.
 
     Spatial flow:
         Input:   (1, 155, 220)
-        Block 1: (16,  77, 110)
-        Block 2: (32,  38,  55)
-        Block 3: (64,  19,  27)
-        Block 4: (128,  9,  13)
+        Block 1: (32,  77, 110)
+        Block 2: (64,  38,  55)
+        Block 3: (128, 19,  27)
         GAP:     (128,  1,   1)
         Flatten: 128
-        FC:      64-dim normalized embedding
+        FC:      128 → 64-dim normalized embedding
     """
 
     def __init__(self):
@@ -30,27 +30,20 @@ class SiameseEncoder(nn.Module):
 
         self.conv_blocks = nn.Sequential(
             # Block 1
-            nn.Conv2d(1, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout2d(p=0.1),
-
-            # Block 2
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
             nn.Dropout2d(p=0.1),
 
-            # Block 3
+            # Block 2
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(p=0.2),
+            nn.Dropout2d(p=0.15),
 
-            # Block 4
+            # Block 3
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
@@ -62,18 +55,16 @@ class SiameseEncoder(nn.Module):
 
         self.embedding = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128, 64),
+            nn.Linear(128, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(p=0.4),
-            nn.Linear(64, 64),
+            nn.Dropout(p=0.3),
+            nn.Linear(128, 64),
         )
 
     def forward(self, x):
         x   = self.conv_blocks(x)
         x   = self.gap(x)
         emb = self.embedding(x)
-        # L2 normalize so all embeddings live on unit sphere
-        # Makes Euclidean distance stable and bounded [0, 2]
         return F.normalize(emb, p=2, dim=1)
 
 
