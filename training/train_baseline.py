@@ -146,7 +146,7 @@ def train():
     # Reduce LR by 50% if val loss doesn't improve for 3 epochs
     # Helps escape plateaus in the loss landscape
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=3, verbose=True
+        optimizer, mode='min', factor=0.5, patience=3
     )
 
     # ── Training Loop ─────────────────────────────────────
