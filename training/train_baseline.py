@@ -13,10 +13,10 @@ from datasets.single_dataset import SingleDataset
 # Change these without touching the training logic.
 # ─────────────────────────────────────────────
 CONFIG = {
-    'epochs':        30,
+    'epochs':        50,
     'batch_size':    16,      # smaller batch for CPU — fits in RAM comfortably
-    'learning_rate': 1e-4,
-    'patience':      7,       # early stopping — stop if no improvement for 7 epochs
+    'learning_rate': 3e-4,
+    'patience':      10,       # increased patience per audit
     'save_path':     os.path.abspath(
                          os.path.join(os.path.dirname(__file__),
                                       '..', 'saved_models', 'baseline_cnn.pth')

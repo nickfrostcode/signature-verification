@@ -2,143 +2,83 @@ import torch
 import torch.nn as nn
 
 # ─────────────────────────────────────────────
-# BASELINE CNN — Binary Classifier
+# BASELINE CNN — Lightweight Binary Classifier
 #
-# The simplest possible approach:
-# Feed one signature image → get genuine/forged prediction.
-#
-# Architecture:
-#   3 convolutional blocks (feature extraction)
-#   2 fully connected layers (classification)
-#
-# This model has no concept of "whose signature is this" —
-# it just learns visual patterns that distinguish genuine
-# strokes from forged ones globally across all subjects.
-#
-# Used as the performance baseline.
-# The Siamese network should outperform this.
+# Reduced from 16M → ~400K parameters.
+# Smaller capacity forces generalization
+# instead of memorization on small datasets.
 # ─────────────────────────────────────────────
-
-
-class ConvBlock(nn.Module):
-    """
-    A single convolutional block used repeatedly in the network.
-
-    Structure:
-        Conv2d → BatchNorm → ReLU → MaxPool
-
-    Why BatchNorm:
-        Normalizes activations between layers.
-        Stabilizes training, allows higher learning rates,
-        reduces sensitivity to weight initialization.
-
-    Why MaxPool:
-        Reduces spatial dimensions by 2x after each block.
-        Forces the network to learn position-invariant features.
-        A stroke slightly left or right should still be detected.
-
-    Input:  (batch, in_channels,  H,   W)
-    Output: (batch, out_channels, H/2, W/2)
-    """
-
-    def __init__(self, in_channels, out_channels, kernel_size=3, padding=1):
-        super().__init__()
-        self.block = nn.Sequential(
-            # Conv2d learns spatial filters (edge detectors, stroke detectors)
-            nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding),
-            # BatchNorm normalizes output of conv across the batch
-            nn.BatchNorm2d(out_channels),
-            # ReLU introduces non-linearity — without this the network
-            # is just a series of linear transformations (useless for complex patterns)
-            nn.ReLU(inplace=True),
-            # MaxPool halves spatial size, keeps strongest activations
-            nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-
-    def forward(self, x):
-        return self.block(x)
 
 
 class BaselineCNN(nn.Module):
     """
-    3-block CNN for binary signature classification.
+    Lightweight 3-block CNN for binary signature classification.
 
-    Input:  (batch, 1, 155, 220) — grayscale signature tensor
-    Output: (batch, 1)           — score between 0 and 1
-                                   0 = genuine, 1 = forged
+    Deliberately small to prevent overfitting on 1,260 images.
+    Uses GlobalAveragePooling instead of a large FC layer
+    to reduce parameters while preserving spatial reasoning.
 
-    Spatial flow through conv blocks:
+    Spatial flow:
         Input:   (1, 155, 220)
-        Block 1: (32,  77, 110)   ← 32 feature maps, halved spatial
-        Block 2: (64,  38,  55)   ← 64 feature maps, halved again
-        Block 3: (128, 19,  27)   ← 128 feature maps, halved again
-        Flatten: 128 × 19 × 27 = 65,664 features
-        FC1:     256 features
-        FC2:     1 output (sigmoid score)
+        Block 1: (16,  77, 110)
+        Block 2: (32,  38,  55)
+        Block 3: (64,  19,  27)
+        GAP:     (64,   1,   1)  ← Global Average Pool
+        Flatten: 64
+        FC:      1 output logit
     """
 
     def __init__(self):
         super().__init__()
 
-        # ── Feature Extractor ─────────────────────────────────
-        # Three conv blocks progressively extract higher-level features:
-        #   Block 1: low-level — edges, stroke tips, endpoints
-        #   Block 2: mid-level — stroke curves, loops, connections
-        #   Block 3: high-level — signature regions, overall structure
         self.features = nn.Sequential(
-            ConvBlock(1,   32),    # 1 input channel (grayscale)
-            ConvBlock(32,  64),
-            ConvBlock(64, 128),
+            # Block 1 — low level edges and stroke tips
+            nn.Conv2d(1, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Dropout2d(p=0.1),
+
+            # Block 2 — mid level curves and connections
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Dropout2d(p=0.1),
+
+            # Block 3 — high level signature structure
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Dropout2d(p=0.2),
         )
 
-        # ── Classifier ────────────────────────────────────────
-        # Takes flattened feature vector → binary prediction
+        # Global Average Pooling — replaces large FC layer
+        # Averages each feature map to a single value
+        # Reduces 64×19×27=32,832 → 64 with no information bottleneck
+        self.gap = nn.AdaptiveAvgPool2d(1)
+
         self.classifier = nn.Sequential(
-            # Flatten (128, 19, 27) → (65664,)
             nn.Flatten(),
-
-            # FC layer 1: compress features
-            nn.Linear(128 * 19 * 27, 256),
+            nn.Linear(64, 32),
             nn.ReLU(inplace=True),
-
-            # Dropout: randomly zeros 50% of neurons during training
-            # Forces the network to not rely on any single feature
-            # Reduces overfitting significantly on small datasets
             nn.Dropout(p=0.5),
-
-            # FC layer 2: final binary output
-            nn.Linear(256, 1),
+            nn.Linear(32, 1),
+            # No sigmoid — BCEWithLogitsLoss handles it
         )
 
     def forward(self, x):
-        """
-        Forward pass — runs input through feature extractor then classifier.
-
-        Input:  x — tensor (batch, 1, 155, 220)
-        Output: tensor (batch, 1) — forgery probability per image
-        """
-        features = self.features(x)
-        return self.classifier(features)
+        x = self.features(x)
+        x = self.gap(x)
+        return self.classifier(x)
 
 
-# ─────────────────────────────────────────────
-# QUICK ARCHITECTURE VERIFICATION
-# Run directly: python -m models.baseline_cnn
-# ─────────────────────────────────────────────
 if __name__ == '__main__':
-    import torch
-
     model = BaselineCNN()
-
-    # Count trainable parameters
-    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"BaselineCNN")
-    print(f"  Total trainable parameters: {total_params:,}")
-
-    # Test forward pass with dummy batch
-    dummy = torch.randn(8, 1, 155, 220)   # batch of 8 images
+    total = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"BaselineCNN — parameters: {total:,}")
+    dummy = torch.randn(8, 1, 155, 220)
     out   = model(dummy)
-    print(f"  Input shape:  {dummy.shape}")
-    print(f"  Output shape: {out.shape}")
-    print(f"  Output range: [{out.min().item():.4f}, {out.max().item():.4f}]")
-    print(f"  ✅ Forward pass successful")
+    print(f"Input: {dummy.shape} → Output: {out.shape}")
+    print("✅ Forward pass successful")

@@ -39,21 +39,24 @@ def load_stats():
 
 def get_augmentation_transform():
     """
-    Return a mild augmentation pipeline for training.
-    These transforms preserve the signature shape while
-    introducing small rotations, translations, and scaling.
+    Stronger augmentation pipeline for training.
+    Simulates natural variation in how someone signs:
+    - Different pen angles (rotation)
+    - Slightly different position on page (translate)
+    - Different pen pressure / scan zoom (scale)
+    - Occasional slight blur (scanner noise)
+    - Occasional mild elastic-style shear
     """
     return T.Compose([
         T.RandomAffine(
-            degrees=5,
-            translate=(0.02, 0.02),
-            scale=(0.95, 1.05),
-            shear=2
+            degrees=8,
+            translate=(0.05, 0.05),
+            scale=(0.90, 1.10),
+            shear=5
         ),
-        T.RandomRotation(degrees=3),
         T.RandomApply([
-            T.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 0.5))
-        ], p=0.15),
+            T.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 1.0))
+        ], p=0.3),
     ])
 
 
