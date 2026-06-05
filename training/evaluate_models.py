@@ -38,7 +38,7 @@ def compute_metrics(labels, scores, threshold=None, positive_label=1):
     return metrics
 
 
-def find_best_threshold(labels, scores, num_thresholds=1000):
+def find_best_threshold(labels, scores, num_thresholds=500):
     labels = np.asarray(labels, dtype=np.int32)
     scores = np.asarray(scores, dtype=np.float32)
     min_score, max_score = float(scores.min()), float(scores.max())
@@ -130,14 +130,14 @@ def evaluate_siamese(model_path, dataset, device, batch_size=16, num_workers=0, 
         for img_a, img_b, labels in loader:
             img_a = img_a.to(device)
             img_b = img_b.to(device)
-            labels = labels.to(device)
-            logits = model(img_a, img_b).squeeze(1)
-            loss = criterion(logits, labels.unsqueeze(1))
+            labels = labels.to(device).unsqueeze(1)
+            logits = model(img_a, img_b)
+            loss = criterion(logits, labels)
             total_loss += loss.item() * logits.size(0)
             total_samples += logits.size(0)
-            probs = torch.sigmoid(logits).cpu().numpy()
+            probs = torch.sigmoid(logits).squeeze(1).cpu().numpy()
             all_probs.append(probs)
-            all_labels.append(labels.cpu().numpy())
+            all_labels.append(labels.squeeze(1).cpu().numpy())
 
     all_probs = np.concatenate(all_probs)
     all_labels = np.concatenate(all_labels)
