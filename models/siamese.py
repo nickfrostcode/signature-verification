@@ -1,14 +1,15 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 # ─────────────────────────────────────────────
 # SIAMESE NETWORK — Similarity-based Verifier
 #
 # Core idea:
 #   Two identical CNN branches (shared weights) encode
-#   each input image into an embedding vector.
-#   The L1 distance between embeddings is computed.
-#   A small classifier decides: same person or forged?
+#   each input image into a normalized embedding vector.
+#   Euclidean distance between embeddings is used as a
+#   similarity measure for contrastive metric learning.
 #
 # Why shared weights:
 #   Both branches must learn the SAME feature space.
@@ -16,15 +17,13 @@ import torch.nn as nn
 #   different stroke features than branch B, making
 #   distance comparison meaningless.
 #
-# Why L1 distance:
-#   L1 (absolute difference) is simple and effective
-#   for comparing embeddings. It produces a vector
-#   where each dimension captures how different the
-#   two signatures are in that feature dimension.
-#   The classifier then weighs those differences.
+# Why normalized embeddings:
+#   Normalization constrains the embedding space to the
+#   unit sphere, which stabilizes distances and makes
+#   the contrastive margin easier to tune.
 #
 # Input:  two tensors (batch, 1, 155, 220)
-# Output: one tensor  (batch, 1) — forgery probability
+# Output: one tensor  (batch, 1) — Euclidean distance
 # ─────────────────────────────────────────────
 
 
@@ -113,7 +112,7 @@ class SiameseEncoder(nn.Module):
         """
         features  = self.conv_blocks(x)
         embedding = self.embedding(features)
-        return embedding
+        return F.normalize(embedding, p=2, dim=1)
 
 
 class SiameseNetwork(nn.Module):
@@ -121,36 +120,26 @@ class SiameseNetwork(nn.Module):
     Full Siamese Network for signature verification.
 
     Takes two signature images, encodes both using the
-    shared encoder, computes their L1 distance, and
-    classifies the pair as genuine-genuine or genuine-forged.
+    shared encoder, and computes the Euclidean distance
+    between normalized embeddings.
 
     Architecture:
         img_a → Encoder ──→ embedding_a ──┐
-                                           ├→ L1 distance → Classifier → score
-        img_b → Encoder ──→ embedding_b ──┘
+                                       ├→ Euclidean distance
+        img_b → Encoder ──→ embedding_b ─┘
         (same weights)
 
     Input:  img_a, img_b — tensors (batch, 1, 155, 220)
-    Output: tensor (batch, 1) — probability pair is forged (label 1)
+    Output: tensor (batch, 1) — Euclidean distance between embeddings
     """
 
     def __init__(self):
         super().__init__()
 
-        # Single encoder instance — both branches share these weights
-        # PyTorch automatically applies the same weights to both
-        # forward passes through this encoder
+        # Shared encoder produces normalized embeddings.
+        # Normalization constrains the embedding space to a unit sphere,
+        # making Euclidean distance a stable similarity measure.
         self.encoder = SiameseEncoder()
-
-        # Classifier takes L1 distance vector (128-dim) → binary score
-        # Small network since the distance already captures
-        # the comparison — we just need to interpret it
-        self.classifier = nn.Sequential(
-            nn.Linear(128, 64),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=0.3),
-            nn.Linear(64, 1),
-        )
 
     def encode(self, x):
         """
@@ -166,25 +155,13 @@ class SiameseNetwork(nn.Module):
         """
         Forward pass for a pair of images.
 
-        Steps:
-          1. Encode both images using shared encoder
-          2. Compute L1 distance between embeddings
-          3. Classify distance as genuine(0) or forged(1)
-
-        Input:  img_a, img_b — tensors (batch, 1, 155, 220)
-        Output: tensor (batch, 1) — forgery probability
+        Output is the Euclidean distance between normalized embeddings.
+        Smaller values indicate genuine pairs, larger values indicate forgery pairs.
         """
-        # Step 1 — Encode both images through shared encoder
         embedding_a = self.encoder(img_a)
         embedding_b = self.encoder(img_b)
-
-        # Step 2 — L1 distance: absolute difference per dimension
-        # Shape: (batch, 128)
-        # Each dimension captures difference in one learned feature
-        distance = torch.abs(embedding_a - embedding_b)
-
-        # Step 3 — Classify the distance vector
-        return self.classifier(distance)
+        distance = F.pairwise_distance(embedding_a, embedding_b, p=2)
+        return distance.unsqueeze(1)
 
 
 # ─────────────────────────────────────────────
