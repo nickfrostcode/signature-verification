@@ -70,7 +70,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
         optimizer.step()
 
         total_loss += loss.item()
-        predicted   = (preds > CONFIG['margin']).float()
+        predicted   = (preds > CONFIG['margin'] / 2).float()
         correct    += (predicted == labels).sum().item()
         total      += labels.size(0)
 
@@ -97,7 +97,7 @@ def evaluate(model, loader, criterion):
             loss   = criterion(preds, labels)
 
             total_loss += loss.item()
-            predicted   = (preds > CONFIG['margin']).float()
+            predicted   = (preds > CONFIG['margin'] / 2).float()
             correct    += (predicted == labels).sum().item()
             total      += labels.size(0)
 
