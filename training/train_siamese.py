@@ -26,6 +26,11 @@ CONFIG = {
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Fix random seeds for reproducibility when comparing runs.
+torch.manual_seed(42)
+if DEVICE.type == 'cuda':
+    torch.cuda.manual_seed_all(42)
+
 
 def train_one_epoch(model, loader, optimizer, criterion):
     """
@@ -50,7 +55,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
         optimizer.step()
 
         total_loss += loss.item()
-        predicted   = (preds > 0.5).float()
+        predicted   = (torch.sigmoid(preds) > 0.5).float()
         correct    += (predicted == labels).sum().item()
         total      += labels.size(0)
 
@@ -77,7 +82,7 @@ def evaluate(model, loader, criterion):
             loss   = criterion(preds, labels)
 
             total_loss += loss.item()
-            predicted   = (preds > 0.5).float()
+            predicted   = (torch.sigmoid(preds) > 0.5).float()
             correct    += (predicted == labels).sum().item()
             total      += labels.size(0)
 
@@ -94,8 +99,8 @@ def train():
     subjects                        = get_all_subjects()
     train_subjects, val_subjects, _ = split_subjects(subjects)
 
-    train_ds = PairDataset(train_subjects)
-    val_ds   = PairDataset(val_subjects)
+    train_ds = PairDataset(train_subjects, augment=True)
+    val_ds   = PairDataset(val_subjects, augment=False)
 
     train_dl = DataLoader(
         train_ds,
@@ -107,7 +112,8 @@ def train():
         val_ds,
         batch_size=CONFIG['batch_size'],
         shuffle=False,
-        num_workers=0
+        num_workers=0,
+        pin_memory=(DEVICE.type == 'cuda')
     )
 
     print(f"\nTrain pairs: {len(train_ds):,} | Val pairs: {len(val_ds):,}")
@@ -117,14 +123,15 @@ def train():
     model = SiameseNetwork().to(DEVICE)
 
     # ── Loss ──────────────────────────────────────────────
-    criterion = nn.BCELoss(
-        weight=torch.tensor(CONFIG['pos_weight']).to(DEVICE)
+    criterion = nn.BCEWithLogitsLoss(
+        pos_weight=torch.tensor(CONFIG['pos_weight']).to(DEVICE)
     )
 
     # ── Optimizer ─────────────────────────────────────────
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=CONFIG['learning_rate']
+        lr=CONFIG['learning_rate'],
+        weight_decay=1e-5
     )
 
     # ── Scheduler ─────────────────────────────────────────

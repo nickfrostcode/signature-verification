@@ -108,10 +108,6 @@ class BaselineCNN(nn.Module):
 
             # FC layer 2: final binary output
             nn.Linear(256, 1),
-
-            # Sigmoid squashes output to [0, 1]
-            # Interpreted as probability of being forged
-            nn.Sigmoid()
         )
 
     def forward(self, x):

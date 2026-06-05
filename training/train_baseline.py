@@ -29,6 +29,11 @@ CONFIG = {
 # Use GPU if available, otherwise CPU
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Fix random seeds for reproducibility when comparing runs.
+torch.manual_seed(42)
+if DEVICE.type == 'cuda':
+    torch.cuda.manual_seed_all(42)
+
 
 def train_one_epoch(model, loader, optimizer, criterion):
     """
@@ -56,7 +61,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
         optimizer.step()        # update weights
 
         total_loss += loss.item()
-        predicted   = (preds > 0.5).float()
+        predicted   = (torch.sigmoid(preds) > 0.5).float()
         correct    += (predicted == labels).sum().item()
         total      += labels.size(0)
 
@@ -86,7 +91,7 @@ def evaluate(model, loader, criterion):
             loss   = criterion(preds, labels)
 
             total_loss += loss.item()
-            predicted   = (preds > 0.5).float()
+            predicted   = (torch.sigmoid(preds) > 0.5).float()
             correct    += (predicted == labels).sum().item()
             total      += labels.size(0)
 
@@ -105,8 +110,8 @@ def train():
     subjects                             = get_all_subjects()
     train_subjects, val_subjects, _      = split_subjects(subjects)
 
-    train_ds = SingleDataset(train_subjects)
-    val_ds   = SingleDataset(val_subjects)
+    train_ds = SingleDataset(train_subjects, augment=True)
+    val_ds   = SingleDataset(val_subjects, augment=False)
 
     train_dl = DataLoader(
         train_ds,
@@ -119,7 +124,8 @@ def train():
         val_ds,
         batch_size=CONFIG['batch_size'],
         shuffle=False,
-        num_workers=0
+        num_workers=0,
+        pin_memory=(DEVICE.type == 'cuda')
     )
 
     print(f"\nTrain batches: {len(train_dl)} | Val batches: {len(val_dl)}\n")
@@ -131,15 +137,17 @@ def train():
     # BCELoss with pos_weight penalizes missing forged signatures more
     # pos_weight=2.0 means forged errors cost twice as much
     # This compensates for the 2:1 genuine/forged class imbalance
-    criterion = nn.BCELoss(
-        weight=torch.tensor(CONFIG['pos_weight']).to(DEVICE)
+    # Use logits + stable binary loss with class imbalance support.
+    criterion = nn.BCEWithLogitsLoss(
+        pos_weight=torch.tensor(CONFIG['pos_weight']).to(DEVICE)
     )
 
     # ── Optimizer ─────────────────────────────────────────
-    # Adam adapts learning rate per parameter — works well out of the box
-    optimizer = torch.optim.Adam(
+    # AdamW adds decoupled weight decay as a regularizer.
+    optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=CONFIG['learning_rate']
+        lr=CONFIG['learning_rate'],
+        weight_decay=1e-5
     )
 
     # ── Scheduler ─────────────────────────────────────────

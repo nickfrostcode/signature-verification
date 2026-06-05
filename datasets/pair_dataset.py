@@ -2,6 +2,7 @@ import os
 from itertools import combinations
 from torch.utils.data import Dataset
 from datasets.base_dataset import (
+    get_augmentation_transform,
     load_stats,
     load_image,
     get_subject_images,
@@ -44,6 +45,7 @@ class PairDataset(Dataset):
         """
         self.processed_dir = processed_dir
         self.augment       = augment
+        self.transform     = get_augmentation_transform() if augment else None
         self.mean, self.std = load_stats()
 
         # Build pair list
@@ -101,8 +103,8 @@ class PairDataset(Dataset):
         path_a, path_b = self.pairs[idx]
         label          = self.labels[idx]
 
-        img_a = load_image(path_a, self.mean, self.std)
-        img_b = load_image(path_b, self.mean, self.std)
+        img_a = load_image(path_a, self.mean, self.std, transform=self.transform)
+        img_b = load_image(path_b, self.mean, self.std, transform=self.transform)
 
         # Label as float32 — required by BCELoss in PyTorch
         label = torch.tensor(label, dtype=torch.float32)

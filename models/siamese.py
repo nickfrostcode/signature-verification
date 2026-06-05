@@ -150,8 +150,6 @@ class SiameseNetwork(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(p=0.3),
             nn.Linear(64, 1),
-            # Sigmoid: output is probability of being forged
-            nn.Sigmoid()
         )
 
     def encode(self, x):

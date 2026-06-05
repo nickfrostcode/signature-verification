@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+import torchvision.transforms as T
 from PIL import Image
 
 # ─────────────────────────────────────────────
@@ -36,7 +37,27 @@ def load_stats():
     return float(data['mean']), float(data['std'])
 
 
-def load_image(img_path, mean, std):
+def get_augmentation_transform():
+    """
+    Return a mild augmentation pipeline for training.
+    These transforms preserve the signature shape while
+    introducing small rotations, translations, and scaling.
+    """
+    return T.Compose([
+        T.RandomAffine(
+            degrees=5,
+            translate=(0.02, 0.02),
+            scale=(0.95, 1.05),
+            shear=2
+        ),
+        T.RandomRotation(degrees=3),
+        T.RandomApply([
+            T.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 0.5))
+        ], p=0.15),
+    ])
+
+
+def load_image(img_path, mean, std, transform=None):
     """
     Load a single processed PNG image and return it as a
     normalized, standardized PyTorch tensor.
@@ -56,7 +77,10 @@ def load_image(img_path, mean, std):
     Output: torch.Tensor shape (1, 155, 220), dtype float32
     """
     # Load as grayscale — processed images are already grayscale
-    img = np.array(Image.open(img_path).convert('L')).astype(np.float32)
+    img = Image.open(img_path).convert('L')
+    if transform is not None:
+        img = transform(img)
+    img = np.array(img).astype(np.float32)
 
     # Scale to [0, 1]
     img = img / 255.0

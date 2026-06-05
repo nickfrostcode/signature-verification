@@ -1,6 +1,7 @@
 import os
 from torch.utils.data import Dataset
 from datasets.base_dataset import (
+    get_augmentation_transform,
     load_stats,
     load_image,
     get_subject_images,
@@ -32,7 +33,7 @@ import torch
 
 class SingleDataset(Dataset):
 
-    def __init__(self, subjects, processed_dir=PROCESSED_DIR):
+    def __init__(self, subjects, processed_dir=PROCESSED_DIR, augment=False):
         """
         Build the full list of individual images for the given subjects.
 
@@ -45,6 +46,7 @@ class SingleDataset(Dataset):
         """
         self.processed_dir = processed_dir
         self.mean, self.std = load_stats()
+        self.transform      = get_augmentation_transform() if augment else None
 
         self.image_paths = []   # list of file paths
         self.labels      = []   # list of int labels (0 or 1)
@@ -83,7 +85,7 @@ class SingleDataset(Dataset):
         path  = self.image_paths[idx]
         label = self.labels[idx]
 
-        img   = load_image(path, self.mean, self.std)
+        img   = load_image(path, self.mean, self.std, transform=self.transform)
 
         # Label as float32 — required by BCELoss in PyTorch
         label = torch.tensor(label, dtype=torch.float32)
