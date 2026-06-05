@@ -148,11 +148,19 @@ def main():
         print('Running baseline single-image inference...')
         threshold = args.threshold if args.threshold is not None else DEFAULT_BASELINE_THRESHOLD
         prob, prediction = predict_baseline(model, args.image, threshold, device)
-        print(f'Model: baseline')
-        print(f'Image: {args.image}')
-        print(f'Threshold: {threshold:.3f}')
-        print(f'Probability: {prob:.4f}')
-        print(f'Prediction: {prediction}')
+        print("\n" + "="*55)
+        print("🔍 SIGNATURE VERIFICATION ANALYSIS (BASELINE)")
+        print("="*55)
+        print(f"File analyzed   : {args.image}")
+        print(f"Raw Probability : {prob:.4f} (ranges from 0 to 1)")
+        print(f"Threshold       : {threshold:.3f}")
+        print("-" * 55)
+        
+        confidence = prob * 100 if prediction == 'genuine' else (1 - prob) * 100
+        print(f"💡 FINAL VERDICT : {prediction.upper()}")
+        print(f"🧠 EXPLANATION   : The model is {confidence:.2f}% confident that the signature is {prediction}.")
+        print(f"                 (A probability above {threshold:.3f} is considered genuine)")
+        print("="*55 + "\n")
         if args.explain:
             print('Generating explainability outputs...')
             outputs = build_explanation('baseline', model, args.image, output_dir=args.output_dir, device=device)
@@ -168,12 +176,20 @@ def main():
         print('Running siamese pair comparison inference...')
         threshold = args.threshold if args.threshold is not None else DEFAULT_SIAMESE_THRESHOLD
         prob, prediction = predict_siamese(model, args.image_a, args.image_b, threshold, device)
-        print(f'Model: siamese')
-        print(f'Image A: {args.image_a}')
-        print(f'Image B: {args.image_b}')
-        print(f'Threshold: {threshold:.3f}')
-        print(f'Probability: {prob:.4f}')
-        print(f'Prediction: {prediction}')
+        print("\n" + "="*55)
+        print("🔍 SIGNATURE COMPARISON ANALYSIS (SIAMESE)")
+        print("="*55)
+        print(f"Image A (Ref)   : {args.image_a}")
+        print(f"Image B (Test)  : {args.image_b}")
+        print(f"Similarity Score: {prob:.4f} (ranges from 0 to 1)")
+        print(f"Threshold       : {threshold:.3f}")
+        print("-" * 55)
+        
+        confidence = prob * 100 if prediction == 'match' else (1 - prob) * 100
+        print(f"💡 FINAL VERDICT : {prediction.upper()}")
+        print(f"🧠 EXPLANATION   : The model is {confidence:.2f}% confident that the signatures {prediction}.")
+        print(f"                 (A score above {threshold:.3f} means they belong to the same person)")
+        print("="*55 + "\n")
         if args.explain:
             print('Generating explainability outputs...')
             outputs = build_explanation('siamese', model, None, args.image_a, args.image_b,
