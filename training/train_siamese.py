@@ -19,9 +19,9 @@ CONFIG = {
                          os.path.join(os.path.dirname(__file__),
                                       '..', 'saved_models', 'siamese.pth')
                      ),
-    # Pairs are balanced (3780 label-0 vs 4200 label-1)
-    # slight imbalance — weight forged class a little more
-    'pos_weight':    1.2,
+    # Pairs are slightly imbalanced and the effective weight is
+    # computed from the training split.
+    'pos_weight':    None,
 }
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -30,6 +30,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.manual_seed(42)
 if DEVICE.type == 'cuda':
     torch.cuda.manual_seed_all(42)
+    torch.backends.cudnn.benchmark = True
 
 
 def train_one_epoch(model, loader, optimizer, criterion):
@@ -52,6 +53,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
 
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
         total_loss += loss.item()
@@ -102,17 +104,20 @@ def train():
     train_ds = PairDataset(train_subjects, augment=True)
     val_ds   = PairDataset(val_subjects, augment=False)
 
+    num_workers = 0 if os.name == 'nt' else min(4, os.cpu_count() or 1)
+
     train_dl = DataLoader(
         train_ds,
         batch_size=CONFIG['batch_size'],
         shuffle=True,
-        num_workers=0
+        num_workers=num_workers,
+        pin_memory=(DEVICE.type == 'cuda')
     )
     val_dl = DataLoader(
         val_ds,
         batch_size=CONFIG['batch_size'],
         shuffle=False,
-        num_workers=0,
+        num_workers=num_workers,
         pin_memory=(DEVICE.type == 'cuda')
     )
 
@@ -123,8 +128,14 @@ def train():
     model = SiameseNetwork().to(DEVICE)
 
     # ── Loss ──────────────────────────────────────────────
+    label_counts = train_ds.get_label_counts()
+    pos_weight = CONFIG['pos_weight']
+    if pos_weight is None:
+        pos_weight = label_counts[0] / max(label_counts[1], 1)
+    print(f"  PairDataset label counts: {label_counts} | pos_weight={pos_weight:.4f}")
+
     criterion = nn.BCEWithLogitsLoss(
-        pos_weight=torch.tensor(CONFIG['pos_weight']).to(DEVICE)
+        pos_weight=torch.tensor(pos_weight).to(DEVICE)
     )
 
     # ── Optimizer ─────────────────────────────────────────

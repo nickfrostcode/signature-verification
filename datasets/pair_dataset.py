@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 from itertools import combinations
 from torch.utils.data import Dataset
 from datasets.base_dataset import (
@@ -76,12 +77,18 @@ class PairDataset(Dataset):
                     self.pairs.append((path_g, path_f))
                     self.labels.append(1)
 
+        self.label_counts = Counter(self.labels)
+
         print(f"PairDataset built — {len(self.pairs):,} pairs "
               f"from {len(subjects)} subjects")
         print(f"  Label 0 (genuine-genuine): "
-              f"{self.labels.count(0):,}")
+              f"{self.label_counts[0]:,}")
         print(f"  Label 1 (genuine-forged):  "
-              f"{self.labels.count(1):,}")
+              f"{self.label_counts[1]:,}")
+
+    def get_label_counts(self):
+        """Return number of pairs per label in this dataset."""
+        return self.label_counts
 
     def __len__(self):
         """Return total number of pairs in this dataset."""

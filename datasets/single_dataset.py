@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 from torch.utils.data import Dataset
 from datasets.base_dataset import (
     get_augmentation_transform,
@@ -65,10 +66,16 @@ class SingleDataset(Dataset):
                 self.image_paths.append(path)
                 self.labels.append(1)
 
+        self.label_counts = Counter(self.labels)
+
         print(f"SingleDataset built — {len(self.image_paths):,} images "
               f"from {len(subjects)} subjects")
-        print(f"  Label 0 (genuine): {self.labels.count(0):,}")
-        print(f"  Label 1 (forged):  {self.labels.count(1):,}")
+        print(f"  Label 0 (genuine): {self.label_counts[0]:,}")
+        print(f"  Label 1 (forged):  {self.label_counts[1]:,}")
+
+    def get_label_counts(self):
+        """Return number of examples per label in this dataset."""
+        return self.label_counts
 
     def __len__(self):
         """Return total number of images in this dataset."""
