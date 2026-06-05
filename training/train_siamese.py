@@ -1,0 +1,178 @@
+import os
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+
+from models.siamese import SiameseNetwork
+from datasets.base_dataset import get_all_subjects, split_subjects
+from datasets.pair_dataset import PairDataset
+
+# ─────────────────────────────────────────────
+# CONFIG
+# ─────────────────────────────────────────────
+CONFIG = {
+    'epochs':        30,
+    'batch_size':    16,
+    'learning_rate': 1e-4,
+    'patience':      7,
+    'save_path':     os.path.abspath(
+                         os.path.join(os.path.dirname(__file__),
+                                      '..', 'saved_models', 'siamese.pth')
+                     ),
+    # Pairs are balanced (3780 label-0 vs 4200 label-1)
+    # slight imbalance — weight forged class a little more
+    'pos_weight':    1.2,
+}
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def train_one_epoch(model, loader, optimizer, criterion):
+    """
+    One full training pass over all pairs.
+    Each batch contains (img_a, img_b, label) triplets.
+    """
+    model.train()
+    total_loss = 0.0
+    correct    = 0
+    total      = 0
+
+    for img_a, img_b, labels in loader:
+        img_a  = img_a.to(DEVICE)
+        img_b  = img_b.to(DEVICE)
+        labels = labels.to(DEVICE).unsqueeze(1)  # (batch,) → (batch, 1)
+
+        preds = model(img_a, img_b)
+        loss  = criterion(preds, labels)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        predicted   = (preds > 0.5).float()
+        correct    += (predicted == labels).sum().item()
+        total      += labels.size(0)
+
+    return total_loss / len(loader), correct / total
+
+
+def evaluate(model, loader, criterion):
+    """
+    One full evaluation pass over all validation pairs.
+    No gradient computation.
+    """
+    model.eval()
+    total_loss = 0.0
+    correct    = 0
+    total      = 0
+
+    with torch.no_grad():
+        for img_a, img_b, labels in loader:
+            img_a  = img_a.to(DEVICE)
+            img_b  = img_b.to(DEVICE)
+            labels = labels.to(DEVICE).unsqueeze(1)
+
+            preds  = model(img_a, img_b)
+            loss   = criterion(preds, labels)
+
+            total_loss += loss.item()
+            predicted   = (preds > 0.5).float()
+            correct    += (predicted == labels).sum().item()
+            total      += labels.size(0)
+
+    return total_loss / len(loader), correct / total
+
+
+def train():
+    print("=" * 55)
+    print("TRAINING — Siamese Network")
+    print(f"Device: {DEVICE}")
+    print("=" * 55 + "\n")
+
+    # ── Data ──────────────────────────────────────────────
+    subjects                        = get_all_subjects()
+    train_subjects, val_subjects, _ = split_subjects(subjects)
+
+    train_ds = PairDataset(train_subjects)
+    val_ds   = PairDataset(val_subjects)
+
+    train_dl = DataLoader(
+        train_ds,
+        batch_size=CONFIG['batch_size'],
+        shuffle=True,
+        num_workers=0
+    )
+    val_dl = DataLoader(
+        val_ds,
+        batch_size=CONFIG['batch_size'],
+        shuffle=False,
+        num_workers=0
+    )
+
+    print(f"\nTrain pairs: {len(train_ds):,} | Val pairs: {len(val_ds):,}")
+    print(f"Train batches: {len(train_dl)} | Val batches: {len(val_dl)}\n")
+
+    # ── Model ─────────────────────────────────────────────
+    model = SiameseNetwork().to(DEVICE)
+
+    # ── Loss ──────────────────────────────────────────────
+    criterion = nn.BCELoss(
+        weight=torch.tensor(CONFIG['pos_weight']).to(DEVICE)
+    )
+
+    # ── Optimizer ─────────────────────────────────────────
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=CONFIG['learning_rate']
+    )
+
+    # ── Scheduler ─────────────────────────────────────────
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=3, verbose=True
+    )
+
+    # ── Training Loop ─────────────────────────────────────
+    os.makedirs(os.path.dirname(CONFIG['save_path']), exist_ok=True)
+
+    best_val_loss  = float('inf')
+    patience_count = 0
+
+    for epoch in range(1, CONFIG['epochs'] + 1):
+
+        train_loss, train_acc = train_one_epoch(model, train_dl, optimizer, criterion)
+        val_loss,   val_acc   = evaluate(model, val_dl, criterion)
+
+        scheduler.step(val_loss)
+
+        print(f"Epoch {epoch:02d}/{CONFIG['epochs']} | "
+              f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | "
+              f"Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
+
+        if val_loss < best_val_loss:
+            best_val_loss  = val_loss
+            patience_count = 0
+            torch.save({
+                'epoch':            epoch,
+                'model_state_dict': model.state_dict(),
+                'val_loss':         val_loss,
+                'val_acc':          val_acc,
+            }, CONFIG['save_path'])
+            print(f"           ✅ Best model saved (val_loss: {val_loss:.4f})")
+
+        else:
+            patience_count += 1
+            print(f"           ⏳ No improvement ({patience_count}/{CONFIG['patience']})")
+
+            if patience_count >= CONFIG['patience']:
+                print(f"\n⛔ Early stopping at epoch {epoch}")
+                break
+
+    print(f"\n{'=' * 55}")
+    print(f"Training complete. Best val loss: {best_val_loss:.4f}")
+    print(f"Model saved to: {CONFIG['save_path']}")
+    print(f"{'=' * 55}")
+
+
+if __name__ == '__main__':
+    train()
