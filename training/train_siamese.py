@@ -15,7 +15,6 @@ CONFIG = {
     'batch_size':    16,
     'learning_rate': 3e-4,
     'patience':      10,
-    'margin':        0.5,
     'save_path':     os.path.abspath(
                          os.path.join(os.path.dirname(__file__),
                                       '..', 'saved_models', 'siamese.pth')
@@ -31,19 +30,6 @@ if DEVICE.type == 'cuda':
     torch.backends.cudnn.benchmark = True
 
 
-class ContrastiveLoss(nn.Module):
-    """Contrastive loss for similarity-based metric learning."""
-
-    def __init__(self, margin=1.0):
-        super().__init__()
-        self.margin = margin
-
-    def forward(self, distances, labels):
-        labels = labels.view(-1)
-        distances = distances.view(-1)
-        similar_loss = (1 - labels) * distances.pow(2)
-        dissimilar_loss = labels * torch.clamp(self.margin - distances, min=0.0).pow(2)
-        return torch.mean(similar_loss + dissimilar_loss)
 
 
 def train_one_epoch(model, loader, optimizer, criterion):
@@ -70,7 +56,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
         optimizer.step()
 
         total_loss += loss.item()
-        predicted   = (preds > CONFIG['margin'] / 2).float()
+        predicted = (torch.sigmoid(preds) > 0.5).float()
         correct    += (predicted == labels).sum().item()
         total      += labels.size(0)
 
@@ -97,7 +83,7 @@ def evaluate(model, loader, criterion):
             loss   = criterion(preds, labels)
 
             total_loss += loss.item()
-            predicted   = (preds > CONFIG['margin'] / 2).float()
+            predicted = (torch.sigmoid(preds) > 0.5).float()
             correct    += (predicted == labels).sum().item()
             total      += labels.size(0)
 
@@ -142,9 +128,11 @@ def train():
 
     # ── Loss ──────────────────────────────────────────────
     label_counts = train_ds.get_label_counts()
-    print(f"  PairDataset label counts: {label_counts} | margin={CONFIG['margin']:.2f}")
+    pos_weight   = label_counts[0] / max(label_counts[1], 1)
+    print(f"  PairDataset label counts: {label_counts} | pos_weight={pos_weight:.4f}")
 
-    criterion = ContrastiveLoss(margin=CONFIG['margin'])
+    criterion = nn.BCEWithLogitsLoss(
+        pos_weight=torch.tensor(pos_weight).to(DEVICE))
 
     # ── Optimizer ─────────────────────────────────────────
     optimizer = torch.optim.AdamW(

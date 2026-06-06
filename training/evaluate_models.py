@@ -106,7 +106,7 @@ def evaluate_baseline(model_path, dataset, device, batch_size=16, num_workers=0)
     }
 
 
-def evaluate_siamese(model_path, dataset, device, batch_size=16, num_workers=0, margin=1.0):
+def evaluate_siamese(model_path, dataset, device, batch_size=16, num_workers=0, threshold=0.5):
     model = SiameseNetwork().to(device)
     checkpoint = torch.load(model_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -121,32 +121,35 @@ def evaluate_siamese(model_path, dataset, device, batch_size=16, num_workers=0, 
     )
 
     all_labels = []
-    all_distances = []
+    all_probs = []
     total_loss = 0.0
     total_samples = 0
+    criterion = nn.BCEWithLogitsLoss()
 
     with torch.no_grad():
         for img_a, img_b, labels in loader:
             img_a = img_a.to(device)
             img_b = img_b.to(device)
             labels = labels.to(device)
-            distances = model(img_a, img_b).squeeze(1)
-            total_loss += torch.sum(distances).item()
-            total_samples += distances.size(0)
-            all_distances.append(distances.cpu().numpy())
+            logits = model(img_a, img_b).squeeze(1)
+            loss = criterion(logits, labels.unsqueeze(1))
+            total_loss += loss.item() * logits.size(0)
+            total_samples += logits.size(0)
+            probs = torch.sigmoid(logits).cpu().numpy()
+            all_probs.append(probs)
             all_labels.append(labels.cpu().numpy())
 
-    all_distances = np.concatenate(all_distances)
+    all_probs = np.concatenate(all_probs)
     all_labels = np.concatenate(all_labels)
     average_loss = total_loss / total_samples
 
-    default_metrics = compute_metrics(all_labels, all_distances, threshold=margin)
-    best_threshold, best_metrics = find_best_threshold(all_labels, all_distances)
+    default_metrics = compute_metrics(all_labels, all_probs, threshold=threshold)
+    best_threshold, best_metrics = find_best_threshold(all_labels, all_probs)
 
     return {
-        'distance_loss': average_loss,
-        'default_threshold': margin,
-        'default_metrics': default_metrics,
+        'loss': average_loss,
+        'threshold': threshold,
+        'metrics': default_metrics,
         'best_threshold': best_threshold,
         'best_metrics': best_metrics,
     }
@@ -205,7 +208,7 @@ def main(args):
                 device,
                 batch_size=args.batch_size,
                 num_workers=num_workers,
-                margin=args.margin,
+                threshold=args.threshold,
             )
             print(f"Siamese {split_name} set: {len(dataset)} pairs")
             print_report(f"Siamese {split_name}", stats)
@@ -217,7 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--device', type=str, default=None,
                         help='Device to use: cuda or cpu. Defaults to cuda if available.')
-    parser.add_argument('--margin', type=float, default=1.0,
-                        help='Default distance threshold for Siamese evaluation.')
+    parser.add_argument('--threshold', type=float, default=0.5,
+                        help='Default probability threshold for Siamese BCE evaluation.')
     args = parser.parse_args()
     main(args)
