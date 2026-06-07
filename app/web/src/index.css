@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+
+
+@theme {
+   --font-sans: 'Outfit', sans-serif;
+   --font-mono: 'Space Mono', monospace;
+
+   /* Deep Space Palette */
+   --color-surface-lowest: #050a0f;
+   --color-surface-dim: #0a141d;
+   --color-surface: #131d25;
+   --color-surface-bright: #172129;
+
+   /* Primary & Accents */
+   --color-primary: #00d4ff;
+   --color-primary-dim: #0088aa;
+   --color-primary-dark: #003642;
+
+   /* Text */
+   --color-on-surface: #dae3f0;
+   --color-on-surface-muted: #859398;
+   --color-on-primary: #001014;
+
+   /* Borders */
+   --color-border: #2c363f;
+   --color-border-light: rgba(255, 255, 255, 0.1);
+
+   /* Radius */
+   --radius-sm: 0.25rem;
+   --radius-md: 0.5rem;
+   --radius-lg: 1rem;
+   --radius-xl: 1.5rem;
+}
+
+@layer base {
+   body {
+      background-color: var(--color-surface-lowest);
+      color: var(--color-on-surface);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      min-height: 100vh;
+   }
+}
+
+@layer components {
+   .glass-panel {
+      background-color: rgba(19, 29, 37, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--radius-lg);
+   }
+
+   .glass-card {
+      background-color: rgba(23, 33, 41, 0.5);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      transition: all 0.2s ease-in-out;
+   }
+
+   .glass-card:hover {
+      border-color: var(--color-primary-dim);
+      background-color: rgba(23, 33, 41, 0.8);
+   }
+
+   .btn-primary {
+      background-color: var(--color-primary);
+      color: var(--color-on-primary);
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-md);
+      transition: background-color 0.2s ease;
+   }
+
+   .btn-primary:hover {
+      background-color: var(--color-primary-dim);
+      color: white;
+   }
+
+   .btn-secondary {
+      background-color: transparent;
+      color: var(--color-primary);
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-primary-dim);
+      transition: all 0.2s ease;
+   }
+
+   .btn-secondary:hover {
+      background-color: rgba(0, 212, 255, 0.1);
+      border-color: var(--color-primary);
+   }
+}
