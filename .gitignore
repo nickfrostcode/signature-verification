@@ -185,7 +185,9 @@ data/
 data_processed/
 saved_models/
 explanations/
+temp_uploads/
 *.png
+!app/preview.png
 *.jpg
 *.jpeg
 *.pth

@@ -74,6 +74,16 @@ python preprocessing/preprocess.py
 
 ---
 
+## 🖥️ Web Interface
+
+If you prefer a graphical user interface instead of the command line, this project includes a beautiful, responsive React + FastAPI web application. 
+
+You can upload signatures directly from your computer or phone, adjust sensitivity thresholds, and view the forensic heatmaps interactively.
+
+👉 **[Click here to read the Web App Quick Start Guide](app/README.md)** to get the interface running locally.
+
+---
+
 ## 🔍 How to use the CLI
 
 ### Baseline Model Inference

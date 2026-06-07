@@ -79,14 +79,15 @@ def predict_siamese(model, image_a_path: str, image_b_path: str, threshold: floa
     return prob, prediction
 
 
-def build_explanation(model_name: str, model, image_path: str, image_a_path: str = None, image_b_path: str = None, output_dir: str = 'explanations', device: torch.device = torch.device('cpu')):
+def build_explanation(model_name: str, model, image_path: str, image_a_path: str = None, image_b_path: str = None, output_dir: str = 'explanations', device: torch.device = torch.device('cpu'), file_prefix: str = ''):
     os.makedirs(output_dir, exist_ok=True)
+    prefix = f"{file_prefix}_" if file_prefix else ""
     if model_name == 'baseline':
         mean, std = load_stats()
         image_tensor = load_image(image_path, mean, std, transform=None).to(device)
         saliency = compute_input_saliency(model, image_tensor)
-        overlay_path = os.path.join(output_dir, 'baseline_explanation_overlay.png')
-        heatmap_path = os.path.join(output_dir, 'baseline_explanation_heatmap.png')
+        overlay_path = os.path.join(output_dir, f'{prefix}baseline_explanation_overlay.png')
+        heatmap_path = os.path.join(output_dir, f'{prefix}baseline_explanation_heatmap.png')
         save_saliency_overlay(image_path, saliency, overlay_path)
         save_raw_saliency(saliency, heatmap_path)
         return {'overlay': overlay_path, 'heatmap': heatmap_path}
@@ -96,10 +97,10 @@ def build_explanation(model_name: str, model, image_path: str, image_a_path: str
         image_a_tensor = load_image(image_a_path, mean, std, transform=None).to(device)
         image_b_tensor = load_image(image_b_path, mean, std, transform=None).to(device)
         saliency_a, saliency_b = compute_siamese_saliency(model, image_a_tensor, image_b_tensor)
-        overlay_a = os.path.join(output_dir, 'siamese_explanation_A_overlay.png')
-        overlay_b = os.path.join(output_dir, 'siamese_explanation_B_overlay.png')
-        heatmap_a = os.path.join(output_dir, 'siamese_explanation_A_heatmap.png')
-        heatmap_b = os.path.join(output_dir, 'siamese_explanation_B_heatmap.png')
+        overlay_a = os.path.join(output_dir, f'{prefix}siamese_explanation_A_overlay.png')
+        overlay_b = os.path.join(output_dir, f'{prefix}siamese_explanation_B_overlay.png')
+        heatmap_a = os.path.join(output_dir, f'{prefix}siamese_explanation_A_heatmap.png')
+        heatmap_b = os.path.join(output_dir, f'{prefix}siamese_explanation_B_heatmap.png')
         save_saliency_overlay(image_a_path, saliency_a, overlay_a)
         save_raw_saliency(saliency_a, heatmap_a)
         save_saliency_overlay(image_b_path, saliency_b, overlay_b)
