@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import (accuracy_score, precision_score, recall_score,
-                             f1_score, roc_auc_score, confusion_matrix)
+                             f1_score, roc_auc_score, roc_curve, confusion_matrix)
 
 from models.baseline_cnn import BaselineCNN
 from models.siamese import SiameseNetwork
@@ -59,6 +59,24 @@ def find_best_threshold(labels, scores, num_thresholds=500):
     return best_threshold, best_metrics
 
 
+def compute_eer(labels, scores):
+    labels = np.asarray(labels, dtype=np.int32)
+    scores = np.asarray(scores, dtype=np.float32)
+    fpr, tpr, thresholds = roc_curve(labels, scores)
+    fnr = 1 - tpr
+    
+    # EER is where FPR (FAR) and FNR (FRR) are closest
+    diffs = np.abs(fpr - fnr)
+    min_idx = np.argmin(diffs)
+    
+    eer = float(np.mean([fpr[min_idx], fnr[min_idx]]))
+    eer_threshold = float(thresholds[min_idx])
+    far_at_eer = float(fpr[min_idx])
+    frr_at_eer = float(fnr[min_idx])
+    
+    return eer, eer_threshold, far_at_eer, frr_at_eer
+
+
 def evaluate_baseline(model_path, dataset, device, batch_size=16, num_workers=0):
     model = BaselineCNN().to(device)
     checkpoint = torch.load(model_path, map_location=device)
@@ -96,6 +114,7 @@ def evaluate_baseline(model_path, dataset, device, batch_size=16, num_workers=0)
     average_loss = total_loss / total_samples
     metrics = compute_metrics(all_labels, all_scores, threshold=0.5)
     best_threshold, best_metrics = find_best_threshold(all_labels, all_scores)
+    eer, eer_thresh, far, frr = compute_eer(all_labels, all_scores)
 
     return {
         'loss': average_loss,
@@ -103,6 +122,10 @@ def evaluate_baseline(model_path, dataset, device, batch_size=16, num_workers=0)
         'metrics': metrics,
         'best_threshold': best_threshold,
         'best_metrics': best_metrics,
+        'eer_threshold': eer_thresh,
+        'eer': eer,
+        'far_at_eer': far,
+        'frr_at_eer': frr,
     }
 
 
@@ -145,6 +168,7 @@ def evaluate_siamese(model_path, dataset, device, batch_size=16, num_workers=0, 
 
     default_metrics = compute_metrics(all_labels, all_probs, threshold=threshold)
     best_threshold, best_metrics = find_best_threshold(all_labels, all_probs)
+    eer, eer_thresh, far, frr = compute_eer(all_labels, all_probs)
 
     return {
         'loss': average_loss,
@@ -152,6 +176,10 @@ def evaluate_siamese(model_path, dataset, device, batch_size=16, num_workers=0, 
         'metrics': default_metrics,
         'best_threshold': best_threshold,
         'best_metrics': best_metrics,
+        'eer_threshold': eer_thresh,
+        'eer': eer,
+        'far_at_eer': far,
+        'frr_at_eer': frr,
     }
 
 
